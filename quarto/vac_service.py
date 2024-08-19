@@ -12,19 +12,13 @@ init_genai()
 
 # kwargs supports - image_uri, mime
 def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, **kwargs):
-
-    vector_name = kwargs.get('vac_name_proxy')
-    if not vector_name:
-        raise ValueError('Need vac_name_proxy parameter to know which database to search on behalf of')
-    
-    log.info(f'Using {vector_name} from vac_name_proxy')
     
     config=ConfigManager(vector_name)
     processor = QuartoProcessor(config)
 
     orchestrator = get_quarto(config, processor)
     if not orchestrator:
-        msg = f"No alloydb config could be configured for {vector_name}"
+        msg = f"No quarto model could be configured for {vector_name}"
         log.error(msg)
         callback.on_llm_end(response=msg)
         return {"answer": msg}
@@ -89,14 +83,9 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
 
                                 if function_name == "decide_to_go_on":
                                     token += f"# go_on={result}\n"
-                                elif function_name == "get_alloydb_source_text":
-                                    token += result
-                                elif function_name == "list_alloydb_sources":
-                                    token += result
                                 else:
-                                    log.warning("Unknown function: {function_name}")
+                                    log.info("Adding result for: {function_name}")
                                     token += result
-
 
                 callback.on_llm_new_token(token=token)
                 big_text += token
@@ -114,15 +103,15 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
                 callback.on_llm_new_token(token=str(err))
         
         # change response to one with executed functions
-        response = alloydb_processor.process_funcs(response)
+        response = processor.process_funcs(response)
 
         if this_text:
-            chat_history.append(("<waiting for ai to explore database>", this_text))
+            chat_history.append(("<waiting for ai>", this_text))
             log.info(f"[{guardrail}] Updated chat_history: {chat_history}")
 
-        go_on_check = alloydb_processor.check_function_result("decide_to_go_on", False)
+        go_on_check = processor.check_function_result("decide_to_go_on", False)
         if go_on_check:
-            log.info("Breaking AlloyDB loop")
+            log.info("Breaking agent loop")
             break
         
         guardrail += 1

@@ -4,5 +4,12 @@ vac:
   quarto: #TODO: update to your own vac configuration
     llm: vertex
     model: gemini-1.5-pro
-    agent: vertex-genai
+    agent: quarto
     display_name: Quarto Agent
+  quarto_test:
+    llm: anthropic
+    model: claude-3-5-sonnet-20240620
+    agent: quarto
+    tools:
+      quarto:
+        render: pdf
