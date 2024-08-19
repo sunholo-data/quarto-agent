@@ -6,6 +6,7 @@ from my_log import log
 
 import subprocess
 import os
+import json
 
 class QuartoProcessor(GenAIFunctionProcessor):
 
@@ -52,6 +53,9 @@ class QuartoProcessor(GenAIFunctionProcessor):
         def quarto_command(cmd: str) -> dict:
             """
             Run a Quarto command in the terminal and capture the output.
+            Do not run commands starting with 'quarto' e.g. 'quarto preview' - instead use 'preview'.
+            The 'quarto' command will be prefixed to your cmd.
+
             
             Args:
                 cmd (str): The command to execute with Quarto (e.g., 'check', 'render <file>').
@@ -64,15 +68,17 @@ class QuartoProcessor(GenAIFunctionProcessor):
 
                 log.info(f"{result.stdout=}")
                 log.info(f"{result.stderr=}")
-                return {
+
+                return json.dumps({
                     "stdout": result.stdout,
                     "stderr": result.stderr
-                }
+                })
+            
             except Exception as e:
-                return {
+                return json.dumps({
                     "stdout": "",
                     "stderr": f"Error running Quarto command '{cmd}': {str(e)}"
-                }
+                })
         
         def quarto_version() -> str:
             """
@@ -112,29 +118,28 @@ class QuartoProcessor(GenAIFunctionProcessor):
                 
                 # Check if there was an error during rendering
                 if result["stderr"]:
-                    return {
+                    return json.dumps({
                         "status": "error",
                         "stdout": result["stdout"],
                         "stderr": result["stderr"],
                         "message": "Quarto rendering failed."
-                    }
+                    })
                 
                 # Upload the rendered file to Google Cloud Storage
                 upload_to_gcs = self.upload_to_gcs(output_filename, file_type=output_format)
                 
-                return {
+                return json.dumps({
                     "status": "success",
                     "gcs_url": upload_to_gcs,
                     "stdout": result["stdout"],
                     "stderr": result["stderr"]
-                }
+                })
             
             except Exception as e:
                 return {
                     "status": "error",
                     "message": f"General error: {str(e)}"
                 }
-
 
         return {
             "quarto_render": quarto_render,

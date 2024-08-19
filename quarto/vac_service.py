@@ -44,8 +44,6 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
 
         log.info(f"# Loop [{guardrail}] - {content=}")
         response = chat.send_message([content], stream=True)
-        log.info(f"[{guardrail}] not executed {response}")
-
         this_text = "" # reset for this loop
         
         for chunk in response:
@@ -78,16 +76,16 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
         log.info(f"[{guardrail}] {executed_responses=}")
 
         token = ""
-        log.info(f"[{guardrail}] executed_response {chunk=}")
         for executed_response in executed_responses:
             fn = executed_response.function_response.name
+            fn_args = executed_response.function_response.response["args"]
             fn_result = executed_response.function_response.response["result"]
-            log.info(f"{fn=}() {fn_result}]")
+            log.info(f"{fn=}({fn_args}) {fn_result}]")
 
             if fn == "decide_to_go_on":
-                token = f"STOPPING: {fn_result.get('chat_summary')}"
+                token = f"\n\nSTOPPING: {fn_result.get('chat_summary')}"
             else:
-                token = f"# {fn}() result:\n{fn_result}"
+                token = f"# {fn}({fn_args}) result:\n{fn_result}"
 
             callback.on_llm_new_token(token=token)
             big_text += token
