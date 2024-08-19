@@ -38,8 +38,8 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
             conversation_text += f"Human: {human}\nAI: {ai}\n"
         content = (
             "A user has asked a question related to Quarto. Here is what has happened so far: "
-            f"<chat history>{conversation_text}</chat_history> "
-            f"Please help the user with their question:<user input>{question}</user input> "
+            f"<chat_history>{conversation_text}</chat_history> "
+            f"Please help the user with their question:<user_input>{question}</user_input> "
             )
 
         log.info(f"# Loop [{guardrail}] - {content=}")

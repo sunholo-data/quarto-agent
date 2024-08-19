@@ -96,7 +96,7 @@ class QuartoProcessor(GenAIFunctionProcessor):
 
         def quarto_render(markdown_content: str, output_format: str = "html", output_filename: str = "output.html") -> dict:
             """
-            Render a Quarto markdown document and upload the rendered output to a Google Cloud Storage bucket.
+            Supply the quarto markdown content to this function and it will render it and upload to a Google Cloud Storage bucket, returning the GS URI
             
             Args:
                 markdown_content (str): The Quarto markdown content to render.
