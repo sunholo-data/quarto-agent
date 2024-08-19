@@ -3,6 +3,15 @@ apiVersion: v1
 prompts:
   quarto:
     quarto_template: |
-      The question: {the_question}
-      Chat history: {chat_history}
+      A user has asked a question related to Quarto.
+      Here is what has happened so far:
+      <chat history>
+      {chat_history}
+      </chat_history>
+
+      Please help the user with their question:
+      <user input>
+      {the_question}
+      </user input>
+
       

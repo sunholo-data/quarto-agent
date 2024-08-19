@@ -4,7 +4,7 @@ from sunholo.vertex import (
     init_genai,
 )
 
-from tools.quarto_agent import get_quarto, quarto_content, QuartoProcessor
+from tools.quarto_agent import get_quarto, QuartoProcessor
 
 from my_log import log
 
@@ -30,62 +30,33 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
     big_text = ""
     usage_metadata = None
     functions_called = []
-    result=None
-    last_responses=None
+
     while guardrail < guardrail_max:
 
-        content = quarto_content(question, chat_history)
-        log.info(f"# Loop [{guardrail}] - {content=}")
-        response = chat.send_message(content, stream=True)
-        this_text = "" # reset for this loop
-        log.debug(f"[{guardrail}] {response}")
+        conversation_text = ""
+        for human, ai in chat_history:
+            conversation_text += f"Human: {human}\nAI: {ai}\n"
+        content = (
+            "A user has asked a question related to Quarto. Here is what has happened so far: "
+            f"<chat history>{conversation_text}</chat_history> "
+            f"Please help the user with their question:<user input>{question}</user input> "
+            )
 
+        log.info(f"# Loop [{guardrail}] - {content=}")
+        response = chat.send_message([content], stream=True)
+        log.info(f"[{guardrail}] not executed {response}")
+
+        this_text = "" # reset for this loop
+        
         for chunk in response:
             try:
+                token = ""
                 log.debug(f"[{guardrail}] {chunk=}")
                 # Check if 'text' is an attribute of chunk and if it's a string
                 if hasattr(chunk, 'text') and isinstance(chunk.text, str):
                     token = chunk.text
                 else:
-                    function_names = []
-                    try:
-                        for part in chunk.candidates[0].content.parts:
-                            if fn := part.function_call:
-                                params = {key: val for key, val in fn.args.items()}
-                                func_args = ",".join(f"{key}={value}" for key, value in params.items())
-                                log.info(f"Found function call: {fn.name}({func_args})")
-                                function_names.append(f"{fn.name}({func_args})")
-                                functions_called.append(f"{fn.name}({func_args})")
-                    except Exception as err:
-                        log.warning(f"{str(err)}")
-
-                    token = ""  # Handle the case where 'text' is not available
-                    
-                    if processor.last_api_requests_and_responses:
-                        if processor.last_api_requests_and_responses != last_responses:
-                            last_responses = processor.last_api_requests_and_responses
-                        for last_response in last_responses:
-                            result=None # reset for this function response
-                            if last_response:
-                                log.info(f"[{guardrail}] {last_response=}")
-                                
-                                # Convert the last_response to a string by extracting relevant information
-                                function_name = last_response[0]
-                                arguments = last_response[1]
-                                result = last_response[2]
-                                func_args = ",".join(f"{key}={value}" for key, value in arguments.items())
-
-                                if f"{function_name}({func_args})" not in function_names:
-                                    log.warning(f"skipping {function_name}({func_args}) as not in execution list")
-                                    continue
-
-                                token = f"\n## Loop [{guardrail}] Function call: {function_name}({func_args}):\n"
-
-                                if function_name == "decide_to_go_on":
-                                    token += f"# go_on={result}\n"
-                                else:
-                                    log.info("Adding result for: {function_name}")
-                                    token += result
+                    log.info(f"skipping {chunk}")
 
                 callback.on_llm_new_token(token=token)
                 big_text += token
@@ -100,16 +71,33 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
                     }
 
             except ValueError as err:
-                callback.on_llm_new_token(token=str(err))
+                callback.on_llm_new_token(token=f"{str(err)} for {chunk=}")
         
         # change response to one with executed functions
-        response = processor.process_funcs(response)
+        executed_responses = processor.process_funcs(response)
+        log.info(f"[{guardrail}] {executed_responses=}")
+
+        token = ""
+        log.info(f"[{guardrail}] executed_response {chunk=}")
+        for executed_response in executed_responses:
+            fn = executed_response.function_response.name
+            fn_result = executed_response.function_response.response["result"]
+            log.info(f"{fn=}() {fn_result}]")
+
+            if fn == "decide_to_go_on":
+                token = f"STOPPING: {fn_result.get('chat_summary')}"
+            else:
+                token = f"# {fn}() result:\n{fn_result}"
+
+            callback.on_llm_new_token(token=token)
+            big_text += token
+            this_text += token
 
         if this_text:
             chat_history.append(("<waiting for ai>", this_text))
             log.info(f"[{guardrail}] Updated chat_history: {chat_history}")
 
-        go_on_check = processor.check_function_result("decide_to_go_on", False)
+        go_on_check = processor.check_function_result("decide_to_go_on", {"go_on":False})
         if go_on_check:
             log.info("Breaking agent loop")
             break

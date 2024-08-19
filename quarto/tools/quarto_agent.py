@@ -30,7 +30,7 @@ class QuartoProcessor(GenAIFunctionProcessor):
             raise ValueError(f"No config.vac.{vac_name}.tools found")
         quarto_config = tools.get("quarto")
         
-        def decide_to_go_on(go_on: bool):
+        def decide_to_go_on(go_on: bool, chat_summary: str) -> dict:
             """
             Examine the chat history.  If the answer to the user's question has been answered, then go_on=False.
             If the chat history indicates the answer is still being looked for, then go_on=True.
@@ -38,14 +38,16 @@ class QuartoProcessor(GenAIFunctionProcessor):
             If there is an error that can't be corrected or solved by you, then go_on=False.
             If there is an error but you think you can solve it by correcting your function arguments (such as an incorrect source), then go_on=True
             If you want to ask the user a question or for some more feedback, then go_on=False.
+            When calling, please also add a chat summary of why you think the function should  be called to end.
             
             Args:
-                go_on: boolean Whether to continue searching or fetching from the AlloyDB database
+                go_on: boolean Whether to continue searching for an answer
+                chat_summary: string A brief explanation on why go_on is TRUE or FALSE
             
             Returns:
                 boolean: True to carry on, False to continue
             """
-            return go_on
+            return {"go_on": go_on, "chat_summary": chat_summary}
         
         def quarto_command(cmd: str) -> dict:
             """
@@ -59,6 +61,9 @@ class QuartoProcessor(GenAIFunctionProcessor):
             """
             try:
                 result = subprocess.run(["quarto"] + cmd.split(), capture_output=True, text=True)
+
+                log.info(f"{result.stdout=}")
+                log.info(f"{result.stderr=}")
                 return {
                     "stdout": result.stdout,
                     "stderr": result.stderr
@@ -72,13 +77,15 @@ class QuartoProcessor(GenAIFunctionProcessor):
         def quarto_version() -> str:
             """
             Reports back the version of Quarto available and what is installed on the server.
+            If the result starts with "OK:" then quarto is successfully installed.
+            There may be other dependencies thought that are not installed such as R or Jupyter.
             
             Returns:
                 str: The version information of Quarto, as returned by the 'quarto check' command.
             """
             result = quarto_command("check")
             if result["stderr"]:
-                return f"Error checking Quarto version: {result['stderr']}"
+                return f"OK: {result['stderr']}"
             return result["stdout"]
 
         def quarto_render(markdown_content: str, output_format: str = "html", output_filename: str = "output.html") -> dict:
@@ -135,17 +142,6 @@ class QuartoProcessor(GenAIFunctionProcessor):
             "quarto_version": quarto_version,
             "decide_to_go_on": decide_to_go_on
         }
-
-def quarto_content(question: str, chat_history=[]) -> str:
-    prompt_config = ConfigManager("quarto")
-    alloydb_template = prompt_config.promptConfig("quarto_template")
-    
-    conversation_text = ""
-    for human, ai in chat_history:
-        conversation_text += f"Human: {human}\nAI: {ai}\n"
-
-    return alloydb_template.format(the_question=question, chat_history=conversation_text[-10000:])
-
 
 def get_quarto(config:ConfigManager, processor:QuartoProcessor):
 
