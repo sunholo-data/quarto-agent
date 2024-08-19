@@ -1,0 +1,8 @@
+kind: promptConfig
+apiVersion: v1
+prompts:
+  quarto:
+    quarto_template: |
+      The question: {the_question}
+      Chat history: {chat_history}
+      

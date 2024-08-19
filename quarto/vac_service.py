@@ -1,65 +1,168 @@
-from my_log import log
+
 from sunholo.utils import ConfigManager
+from sunholo.vertex import (
+    init_genai,
+)
 
-# VAC specific imports 
+from tools.quarto_agent import get_quarto, quarto_content, QuartoProcessor
 
-#TODO: Developer to update to their own implementation
-from sunholo.vertex import init_vertex, get_vertex_memories
-from vertexai.preview.generative_models import GenerativeModel
+from my_log import log
 
-#TODO: change this to a streaming VAC function
-def vac_stream(question: str, vector_name, chat_history=[], callback=None, **kwargs):
+init_genai()
 
-    rag_model = create_model(vector_name)
+# kwargs supports - image_uri, mime
+def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, **kwargs):
 
-    # streaming model calls
-    response = rag_model.generate_content(question, stream=True)
-    for chunk in response:
-        try:
-            callback.on_llm_new_token(token=chunk.text)
-        except ValueError as err:
-            callback.on_llm_new_token(token=str(err))
+    vector_name = kwargs.get('vac_name_proxy')
+    if not vector_name:
+        raise ValueError('Need vac_name_proxy parameter to know which database to search on behalf of')
     
-    callback.on_llm_end(response=response)
-    log.info(f"rag_model.response: {response}")
+    log.info(f'Using {vector_name} from vac_name_proxy')
+    
+    config=ConfigManager(vector_name)
+    processor = QuartoProcessor(config)
+
+    orchestrator = get_quarto(config, processor)
+    if not orchestrator:
+        msg = f"No alloydb config could be configured for {vector_name}"
+        log.error(msg)
+        callback.on_llm_end(response=msg)
+        return {"answer": msg}
+
+    chat = orchestrator.start_chat()
+
+    guardrail = 0
+    guardrail_max = kwargs.get('max_steps', 10)
+    big_text = ""
+    usage_metadata = None
+    functions_called = []
+    result=None
+    last_responses=None
+    while guardrail < guardrail_max:
+
+        content = quarto_content(question, chat_history)
+        log.info(f"# Loop [{guardrail}] - {content=}")
+        response = chat.send_message(content, stream=True)
+        this_text = "" # reset for this loop
+        log.debug(f"[{guardrail}] {response}")
+
+        for chunk in response:
+            try:
+                log.debug(f"[{guardrail}] {chunk=}")
+                # Check if 'text' is an attribute of chunk and if it's a string
+                if hasattr(chunk, 'text') and isinstance(chunk.text, str):
+                    token = chunk.text
+                else:
+                    function_names = []
+                    try:
+                        for part in chunk.candidates[0].content.parts:
+                            if fn := part.function_call:
+                                params = {key: val for key, val in fn.args.items()}
+                                func_args = ",".join(f"{key}={value}" for key, value in params.items())
+                                log.info(f"Found function call: {fn.name}({func_args})")
+                                function_names.append(f"{fn.name}({func_args})")
+                                functions_called.append(f"{fn.name}({func_args})")
+                    except Exception as err:
+                        log.warning(f"{str(err)}")
+
+                    token = ""  # Handle the case where 'text' is not available
+                    
+                    if processor.last_api_requests_and_responses:
+                        if processor.last_api_requests_and_responses != last_responses:
+                            last_responses = processor.last_api_requests_and_responses
+                        for last_response in last_responses:
+                            result=None # reset for this function response
+                            if last_response:
+                                log.info(f"[{guardrail}] {last_response=}")
+                                
+                                # Convert the last_response to a string by extracting relevant information
+                                function_name = last_response[0]
+                                arguments = last_response[1]
+                                result = last_response[2]
+                                func_args = ",".join(f"{key}={value}" for key, value in arguments.items())
+
+                                if f"{function_name}({func_args})" not in function_names:
+                                    log.warning(f"skipping {function_name}({func_args}) as not in execution list")
+                                    continue
+
+                                token = f"\n## Loop [{guardrail}] Function call: {function_name}({func_args}):\n"
+
+                                if function_name == "decide_to_go_on":
+                                    token += f"# go_on={result}\n"
+                                elif function_name == "get_alloydb_source_text":
+                                    token += result
+                                elif function_name == "list_alloydb_sources":
+                                    token += result
+                                else:
+                                    log.warning("Unknown function: {function_name}")
+                                    token += result
+
+
+                callback.on_llm_new_token(token=token)
+                big_text += token
+                this_text += token
+                
+                if not usage_metadata:
+                    chunk_metadata = chunk.usage_metadata
+                    usage_metadata = {
+                        "prompt_token_count": chunk_metadata.prompt_token_count,
+                        "candidates_token_count": chunk_metadata.candidates_token_count,
+                        "total_token_count": chunk_metadata.total_token_count,
+                    }
+
+            except ValueError as err:
+                callback.on_llm_new_token(token=str(err))
+        
+        # change response to one with executed functions
+        response = alloydb_processor.process_funcs(response)
+
+        if this_text:
+            chat_history.append(("<waiting for ai to explore database>", this_text))
+            log.info(f"[{guardrail}] Updated chat_history: {chat_history}")
+
+        go_on_check = alloydb_processor.check_function_result("decide_to_go_on", False)
+        if go_on_check:
+            log.info("Breaking AlloyDB loop")
+            break
+        
+        guardrail += 1
+        if guardrail > guardrail_max:
+            log.warning("Guardrail kicked in, more than 10 loops")
+            break
+
+    callback.on_llm_end(response=big_text)
+    log.info(f"orchestrator.response: {big_text}")
 
     metadata = {
-        "chat_history": chat_history
+        "question:": question,
+        "chat_history": chat_history,
+        "usage_metadata": usage_metadata,
+        "functions_called": functions_called
     }
 
-    return {"answer": response.text, "metadata": metadata}
+    return {"answer": big_text or "No answer was given", "metadata": metadata}
 
 
+def vac(question: str, vector_name: str, chat_history=[], **kwargs):
+    # Create a callback that does nothing for streaming if you don't want intermediate outputs
+    class NoOpCallback:
+        def on_llm_new_token(self, token):
+            pass
+        def on_llm_end(self, response):
+            pass
 
-#TODO: change this to a batch VAC function
-def vac(question: str, vector_name, chat_history=[], **kwargs):
+    # Use the NoOpCallback for non-streaming behavior
+    callback = NoOpCallback()
 
-    rag_model = create_model(vector_name)
-
-    response = rag_model.generate_content(question)
-
-    log.info(f"Got response: {response}")
-
-    return {"answer": response.text}
-
-
-# TODO: common model setup to both batching and streaming
-def create_model(vac):
-    config = ConfigManager(vac)
-
-    gcp_config = config.vacConfig("gcp_config")
-    if not gcp_config:
-        raise ValueError(f"Need config.{vac}.gcp_config to configure XXXX on VertexAI")
-
-    init_vertex(gcp_config)
-    corpus_tools = get_vertex_memories(config)
-
-    model = config.vacConfig("model")
-
-    # Create a gemini-pro model instance
-    # https://ai.google.dev/api/python/google/generativeai/GenerativeModel#streaming
-    rag_model = GenerativeModel(
-        model_name=model or "gemini-1.0-pro-002", tools=[corpus_tools]
+    # Pass all arguments to vac_stream and use the final return
+    result = vac_stream(
+        question=question, 
+        vector_name=vector_name, 
+        chat_history=chat_history, 
+        callback=callback, 
+        **kwargs
     )
 
-    return rag_model
+    return result
+
+
