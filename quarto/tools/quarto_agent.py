@@ -25,6 +25,9 @@ class QuartoProcessor(GenAIFunctionProcessor):
         
     def construct_tools(self) -> dict:
         tools = self.config.vacConfig("tools")
+        if not tools:
+            vac_name = self.config.vector_name
+            raise ValueError(f"No config.vac.{vac_name}.tools found")
         quarto_config = tools.get("quarto")
         
         def decide_to_go_on(go_on: bool):
@@ -44,35 +47,39 @@ class QuartoProcessor(GenAIFunctionProcessor):
             """
             return go_on
         
-        def quarto_command(cmd:str) -> str:
+        def quarto_command(cmd: str) -> dict:
             """
-            Run a quarto command - will prefix the command with 'quarto' and run in the terminal
-
-            Args: str: command to execute with quarto e.g. quarto 'cmd'
-
+            Run a Quarto command in the terminal and capture the output.
+            
+            Args:
+                cmd (str): The command to execute with Quarto (e.g., 'check', 'render <file>').
+            
             Returns:
-                str: The result of the command
+                dict: A dictionary containing 'stdout' and 'stderr' from the command execution.
             """
             try:
-                result = subprocess.run(["quarto", cmd], capture_output=True, text=True)
-                return result.stdout
+                result = subprocess.run(["quarto"] + cmd.split(), capture_output=True, text=True)
+                return {
+                    "stdout": result.stdout,
+                    "stderr": result.stderr
+                }
             except Exception as e:
-                return f"Error checking running Quarto cmd {cmd}: {str(e)}"
+                return {
+                    "stdout": "",
+                    "stderr": f"Error running Quarto command '{cmd}': {str(e)}"
+                }
         
         def quarto_version() -> str:
             """
-            Reports back what version of Quarto is available and what is installed on the server.
-
-            Args: None
-
+            Reports back the version of Quarto available and what is installed on the server.
+            
             Returns:
-                str: Text about the version, the result of "quarto check" terminal command
+                str: The version information of Quarto, as returned by the 'quarto check' command.
             """
-            try:
-                result = subprocess.run(["quarto", "check"], capture_output=True, text=True)
-                return result.stdout
-            except Exception as e:
-                return f"Error checking Quarto version: {str(e)}"
+            result = quarto_command("check")
+            if result["stderr"]:
+                return f"Error checking Quarto version: {result['stderr']}"
+            return result["stdout"]
 
         def quarto_render(markdown_content: str, output_format: str = "html", output_filename: str = "output.html") -> dict:
             """
@@ -93,18 +100,33 @@ class QuartoProcessor(GenAIFunctionProcessor):
                     f.write(markdown_content)
                 
                 # Render the markdown file using Quarto
-                render_command = ["quarto", "render", markdown_filename, f"--to={output_format}", f"--output={output_filename}"]
-                subprocess.run(render_command, check=True)
-
+                render_command = f"render {markdown_filename} --to={output_format} --output={output_filename}"
+                result = quarto_command(render_command)
+                
+                # Check if there was an error during rendering
+                if result["stderr"]:
+                    return {
+                        "status": "error",
+                        "stdout": result["stdout"],
+                        "stderr": result["stderr"],
+                        "message": "Quarto rendering failed."
+                    }
+                
                 # Upload the rendered file to Google Cloud Storage
                 upload_to_gcs = self.upload_to_gcs(output_filename, file_type=output_format)
                 
-                return {"status": "success", "gcs_url": upload_to_gcs}
+                return {
+                    "status": "success",
+                    "gcs_url": upload_to_gcs,
+                    "stdout": result["stdout"],
+                    "stderr": result["stderr"]
+                }
             
-            except subprocess.CalledProcessError as e:
-                return {"status": "error", "message": f"Error during Quarto rendering: {str(e)}"}
             except Exception as e:
-                return {"status": "error", "message": f"General error: {str(e)}"}
+                return {
+                    "status": "error",
+                    "message": f"General error: {str(e)}"
+                }
 
 
         return {
@@ -133,7 +155,7 @@ def get_quarto(config:ConfigManager, processor:QuartoProcessor):
         model_name = None
         if config.vacConfig('llm') != "vertex":
             model_name = 'gemini-1.5-flash'
-        alloydb_model = processor.get_model(
+        model = processor.get_model(
             system_instruction=(
                     "You are a helpful Quarto agent that helps users create and render Quarto documents. "
                     "When you think the answer has been given to the satisfaction of the user, or you think no answer is possible, or you need user confirmation or input, you MUST use the decide_to_go_on(go_on=False) function"
@@ -142,8 +164,8 @@ def get_quarto(config:ConfigManager, processor:QuartoProcessor):
             model_name=model_name
         )
 
-        if alloydb_model:
-            return alloydb_model
+        if model:
+            return model
 
     log.error("Error initializing quarto model")    
     return None
