@@ -36,7 +36,7 @@ steps:
         && apt-get autoremove -y \
         && apt-get autoclean -y \
         && rm -rf /var/lib/apt/lists/* \
-        && rm -rf /tmp/* 
+        && rm -rf /tmp/* \
         && quarto check
 
       COPY . .
