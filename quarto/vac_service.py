@@ -1,4 +1,3 @@
-
 from sunholo.utils import ConfigManager
 from sunholo.vertex import init_genai
 from sunholo.gcs import get_bytes_from_gcs
@@ -7,16 +6,17 @@ from tools.quarto_agent import get_quarto, QuartoProcessor
 
 import mimetypes
 import tempfile
-import PIL.Image
 
 from my_log import log
+
+import google.generativeai as genai
 
 init_genai()
 
 # kwargs supports - image_uri, mime
 def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, **kwargs):
     
-    config=ConfigManager(vector_name)
+    config = ConfigManager(vector_name)
     processor = QuartoProcessor(config)
 
     orchestrator = get_quarto(config, processor)
@@ -35,8 +35,10 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
         log.info(f"Found {image_uri} - downloading...")
         file_bytes = get_bytes_from_gcs(image_uri)
         extension = mimetypes.guess_extension(mime_type)
+        if image_uri.endswith(".qmd") or image_uri.endswith(".md"):
+            extension = ".qmd"
 
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=extension)
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=extension, dir="renders")
         downloaded_file = temp_file.name
         
         with open(downloaded_file, 'wb') as f:
@@ -44,20 +46,15 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
         
         log.info(f"Created {downloaded_file} from {image_uri}")
     
-    content = [f"Please help the user with their question:<user_input>{question}</user_input>"] 
+    content = [f"Please help the user with their question:<user_input>{question}</user_input>",
+               "If any quarto markdown has minor syntax errors, please attempt to fix the code and try again"] 
                
     if downloaded_file:
-        if mime_type.startswith('image'):
-            downloaded_content = PIL.Image.open(downloaded_file)
-        elif mime_type.startswith('video'):
-            #TODO: file API
-            pass
-        else:
-            with open(downloaded_file, 'r') as f:
-                markdown = f.read()
-            downloaded_content = f"Markdown:\n{markdown}\n"
+        content.append(f"A local file is avilable to work with located at: {downloaded_file}")
+        #downloaded_content = genai.upload_file(downloaded_file)
+        #log.info(f"{downloaded_content=}")
 
-        content.append(downloaded_content)
+        #content.append(downloaded_content)
 
     chat = orchestrator.start_chat()
 
@@ -68,14 +65,6 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
     functions_called = []
 
     while guardrail < guardrail_max:
-
-        conversation_text = ""
-        for human, ai in chat_history:
-            conversation_text += f"Human: {human}\nAI: {ai}\n"
-        content.append(
-            "A user has asked a question related to Quarto. Here is what has happened so far: "
-            f"<chat_history>{conversation_text}</chat_history>"
-            )
 
         log.info(f"# Loop [{guardrail}] - {content=}")
         response = chat.send_message(content, stream=True)
@@ -130,8 +119,8 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
             this_text += token
 
         if this_text:
-            chat_history.append(("<waiting for ai>", this_text))
-            log.info(f"[{guardrail}] Updated chat_history: {chat_history}")
+            content.append(f"Quarto Agent: {this_text}")    
+            log.info(f"[{guardrail}] Updated content: {this_text}")
 
         go_on_check = processor.check_function_result("decide_to_go_on", {"go_on":False})
         if go_on_check:

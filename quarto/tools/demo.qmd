@@ -1,9 +1,11 @@
 ---
-title: "Quarto Basics"
+title: "Quarto Agent Basics"
 format:
   html:
     code-fold: true
 ---
+
+This is a file that was rendered by the Quarto Agent.
 
 For a demonstration of a line plot on a polar axis, see @fig-polar.
 

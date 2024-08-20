@@ -8,6 +8,7 @@ import subprocess
 import os
 import json
 import traceback
+import base64
 
 class QuartoProcessor(GenAIFunctionProcessor):
 
@@ -32,31 +33,60 @@ class QuartoProcessor(GenAIFunctionProcessor):
         #    raise ValueError(f"No config.vac.{vac_name}.tools found")
         #quarto_config = tools.get("quarto")
 
-        def render_and_upload_quarto(markdown: str = "") -> dict:
+        def write_markdown_to_file(markdown: str, file_path: str = "renders/temp.qmd") -> str:
             """
-            A string of markdown is supplied to the markdown argument.
+            Writes the given markdown content to a specified file.
+
+            Args:
+                markdown (str): The markdown content to write to the file.
+                file_path (str): The path to the file where the markdown will be written. 
+                                Default is "renders/temp.qmd".
+
+            Returns:
+                str: The path to the file where the markdown was written.
+            """
+            try:
+                # Ensure the directory exists
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+                # Write the markdown content to the file
+                with open(file_path, 'w', encoding='utf-8') as file:
+                    file.write(markdown)
+                
+                # Log the successful write operation
+                log.info(f"Markdown successfully written to {file_path}")
+                return file_path
+
+            except Exception as e:
+                log.error(f"Error writing markdown to file: {str(e)}")
+                raise
+
+        def render_and_upload_quarto(markdown_filename: str = "") -> dict:
+            """
+            Render and upload a Quarto markdown document to Google Cloud Storage.
+
+            This function expects a filename location of valid Quarto markdown. 
+            The encoded markdown will be rendered using Quarto. 
+            The resulting output file will be uploaded to a Google Cloud Storage (GCS) bucket.
             The markdown must be quarto formatted to work with quarto.
             The markdown will be supplied to the quarto_cmd() function and execute `quarto render temp.qmd --to={format} --output={filename}`
             If successfully rendered, the output file will then be uploaded to a GCS bucket
             
             Args:
-                markdown (str): The Quarto markdown content to render. If not provided, a demo markdown string will be used.
-            
+                markdown_filename (str): The location of the markdown file to render. If not provided, a demo markdown file will be used.
             Returns:
-                dict: A dictionary with the result of the rendering process, including the URL of the uploaded file.
+                dict: A dictionary with the result of the rendering process, including:
+                    - "status": "success" or "error" depending on the outcome.
+                    - "gcs_url": The URL of the uploaded file (if successful).
+                    - "stdout": The standard output from the Quarto rendering process.
+                    - "stderr": The standard error output from the Quarto rendering process.
+                    - "message": An error message if the rendering or upload failed.
             """
 
+            if not markdown_filename:
+                markdown_filename = 'tools/demo.qmd'
 
-            if not markdown:
-                with open('tools/demo.qmd', 'r') as f:
-                    markdown = f.read()
-            
-            try:
-                # Write markdown content to a temporary file
-                markdown_filename = "renders/temp.qmd"
-                with open(markdown_filename, 'w') as f:
-                    f.write(markdown)
-                
+            try:               
                 # Render the markdown file using Quarto
                 format='html'
                 filename='output.html'
@@ -167,7 +197,9 @@ class QuartoProcessor(GenAIFunctionProcessor):
                 str: The version information of Quarto, as returned by the 'quarto check' command.
             """
             result = quarto_command("check")
-            if result["stderr"]:
+            result = json.loads(result)
+
+            if result["status"] == "success":
                 return f"OK: {result['stderr']}"
             return result["stdout"]
 
@@ -240,6 +272,7 @@ class QuartoProcessor(GenAIFunctionProcessor):
             "decide_to_go_on": decide_to_go_on,
             "install_pip_package": install_pip_package,
             "install_r_package": install_r_package,
+            "write_markdown_to_file": write_markdown_to_file,
         }
 
 def get_quarto(config:ConfigManager, processor:QuartoProcessor):
