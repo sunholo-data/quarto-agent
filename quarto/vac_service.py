@@ -1,10 +1,13 @@
 
 from sunholo.utils import ConfigManager
-from sunholo.vertex import (
-    init_genai,
-)
+from sunholo.vertex import init_genai
+from sunholo.gcs import get_bytes_from_gcs
 
 from tools.quarto_agent import get_quarto, QuartoProcessor
+
+import mimetypes
+import tempfile
+import PIL.Image
 
 from my_log import log
 
@@ -22,6 +25,39 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
         log.error(msg)
         callback.on_llm_end(response=msg)
         return {"answer": msg}
+    
+    downloaded_file = None
+    mime_type = None
+    if 'image_uri' in kwargs:
+        image_uri = kwargs['image_uri']
+        mime_type = kwargs['mime']
+
+        log.info(f"Found {image_uri} - downloading...")
+        file_bytes = get_bytes_from_gcs(image_uri)
+        extension = mimetypes.guess_extension(mime_type)
+
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=extension)
+        downloaded_file = temp_file.name
+        
+        with open(downloaded_file, 'wb') as f:
+            f.write(file_bytes)
+        
+        log.info(f"Created {downloaded_file} from {image_uri}")
+    
+    content = [f"Please help the user with their question:<user_input>{question}</user_input>"] 
+               
+    if downloaded_file:
+        if mime_type.startswith('image'):
+            downloaded_content = PIL.Image.open(downloaded_file)
+        elif mime_type.startswith('video'):
+            #TODO: file API
+            pass
+        else:
+            with open(downloaded_file, 'r') as f:
+                markdown = f.read()
+            downloaded_content = f"Markdown:\n{markdown}\n"
+
+        content.append(downloaded_content)
 
     chat = orchestrator.start_chat()
 
@@ -36,14 +72,13 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
         conversation_text = ""
         for human, ai in chat_history:
             conversation_text += f"Human: {human}\nAI: {ai}\n"
-        content = (
+        content.append(
             "A user has asked a question related to Quarto. Here is what has happened so far: "
-            f"<chat_history>{conversation_text}</chat_history> "
-            f"Please help the user with their question:<user_input>{question}</user_input> "
+            f"<chat_history>{conversation_text}</chat_history>"
             )
 
         log.info(f"# Loop [{guardrail}] - {content=}")
-        response = chat.send_message([content], stream=True)
+        response = chat.send_message(content, stream=True)
         this_text = "" # reset for this loop
         
         for chunk in response:
