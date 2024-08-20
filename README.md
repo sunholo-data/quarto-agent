@@ -140,7 +140,7 @@ STOPPING: The user asked to render the demo Quarto page and the agent successful
 ----Loop [1] End------
 ```
 
-Execute your own QMD files:
+Execute your own .qmd files:
 
 ```bash
 curl -X POST ${FLASK_URL}/vac/streaming/quarto_test \
@@ -158,3 +158,5 @@ curl -X POST ${FLASK_URL}/vac/streaming/quarto_test \
 STOPPING: The user asked to render a markdown file and the file was rendered successfully.
 ----Loop [1] End------
 ```
+
+Get a bot to create the qmd markdown and write to a file.

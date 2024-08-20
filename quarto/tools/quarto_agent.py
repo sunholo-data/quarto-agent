@@ -8,23 +8,34 @@ import subprocess
 import os
 import json
 import traceback
-import base64
+import time
+import shutil
 
 class QuartoProcessor(GenAIFunctionProcessor):
 
-    def upload_to_gcs(self, filename, file_type):
-        log.info(f"Uploading {filename=} of {file_type=}")
+    def upload_to_gcs(self, folder:str):
+        log.info(f"Uploading {folder=}")
         vector_name = self.config.vector_name
 
-        file_url = add_file_to_gcs(filename, 
-                                vector_name=vector_name,
-                                metadata={"type": "quarto",
-                                          "file_type": file_type},
-                                bucket_filepath=f"quarto/{file_type}/{os.path.basename(filename)}")
-        
-        log.info(f"Uploaded to {file_url=}")
+        output_urls = []
+        # Iterate through all files in the directory and upload them
+        for root, _, files in os.walk(folder):
+            for file in files:
+                filename = os.path.join(root, file)
 
-        return file_url
+                # Create a relative path for the bucket
+                relative_path = os.path.relpath(filename, folder)
+                bucket_filepath = f"quarto/{vector_name}/{folder}/{relative_path}"
+
+                file_url = add_file_to_gcs(filename,
+                                           vector_name=vector_name,
+                                           metadata={"type": "quarto"},
+                                           bucket_filepath=bucket_filepath)
+        
+                log.info(f"Uploaded {filename} to {file_url=}")
+                output_urls.append(file_url)
+
+        return output_urls
         
     def construct_tools(self) -> dict:
         #tools = self.config.vacConfig("tools")
@@ -61,7 +72,7 @@ class QuartoProcessor(GenAIFunctionProcessor):
                 log.error(f"Error writing markdown to file: {str(e)}")
                 raise
 
-        def render_and_upload_quarto(markdown_filename: str = "") -> dict:
+        def render_and_upload_quarto(markdown_filename: str = "", format: str='html') -> dict:
             """
             Render and upload a Quarto markdown document to Google Cloud Storage.
 
@@ -74,6 +85,7 @@ class QuartoProcessor(GenAIFunctionProcessor):
             
             Args:
                 markdown_filename (str): The location of the markdown file to render. If not provided, a demo markdown file will be used.
+                format (str): The format to render the markdown file into - default is 'html'.
             Returns:
                 dict: A dictionary with the result of the rendering process, including:
                     - "status": "success" or "error" depending on the outcome.
@@ -87,11 +99,19 @@ class QuartoProcessor(GenAIFunctionProcessor):
                 markdown_filename = 'tools/demo.qmd'
 
             try:               
-                # Render the markdown file using Quarto
-                format='html'
-                filename='output.html'
-                render_command = f"render {markdown_filename} --to={format} --output={filename}"
-                result = quarto_command(render_command)
+                # Create a timestamped directory
+                timestamp = time.strftime("%Y%m%d-%H%M%S")
+                temp_dir = os.path.join("renders", timestamp)
+                os.makedirs(temp_dir, exist_ok=True)
+
+                # Copy the markdown file to the timestamped directory
+                new_markdown_filename = os.path.join(temp_dir, os.path.basename(markdown_filename))
+                shutil.copy(markdown_filename, new_markdown_filename)
+
+                # Render the markdown file using Quarto from the new directory
+                output_filename = f'output.{format}'
+                render_command = f"render {os.path.basename(new_markdown_filename)} --to={format} --output={output_filename}"
+                result = quarto_command(render_command, cwd=temp_dir)
                 result = json.loads(result)
                 log.info(f"{result=}")
 
@@ -105,11 +125,11 @@ class QuartoProcessor(GenAIFunctionProcessor):
                     })
                 
                 # Upload the rendered file to Google Cloud Storage
-                upload_to_gcs = self.upload_to_gcs(filename, file_type=format)
+                upload_to_gcs = self.upload_to_gcs(temp_dir)
                 
                 return json.dumps({
                     "status": "success",
-                    "gcs_url": upload_to_gcs,
+                    "gcs_urls": upload_to_gcs,
                     "stdout": result["stdout"],
                     "stderr": result["stderr"]
                 })
@@ -143,7 +163,7 @@ class QuartoProcessor(GenAIFunctionProcessor):
             """
             return {"go_on": go_on, "chat_summary": chat_summary}
         
-        def quarto_command(cmd: str) -> dict:
+        def quarto_command(cmd: str, cwd: str = None) -> dict:
             """
             Run a Quarto command in the terminal and capture the output.
             Do not run commands starting with 'quarto' e.g. 'quarto preview' - instead use 'preview'.
@@ -151,15 +171,20 @@ class QuartoProcessor(GenAIFunctionProcessor):
             
             Args:
                 cmd (str): The command to execute with Quarto (e.g., 'check', 'render <file>').
-            
+                cwd (str): The working directory in which to run the command. Default is None, 
+                   which means the command runs in the current working directory.        
             Returns:
                 dict: A dictionary containing 'stdout' and 'stderr' from the command execution.
                     If the command is successful (return code 0), 'status' will be 'success',
                     even if there is content in 'stderr'.
             """
             try:
-                result = subprocess.run(["quarto"] + cmd.split(), capture_output=True, text=True)
-
+                result = subprocess.run(
+                            ["quarto"] + cmd.split(), 
+                            capture_output=True, 
+                            text=True, 
+                            cwd=cwd
+                        )
                 log.info(f"{result.stdout=}")
                 log.info(f"{result.stderr=}")
 

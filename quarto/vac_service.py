@@ -72,7 +72,7 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
         
         for chunk in response:
             try:
-                token = f"\n----Loop [{guardrail}]------\n"
+                token = f"\n----Loop [{guardrail}] Start------\n"
                 log.debug(f"[{guardrail}] {chunk=}")
                 # Check if 'text' is an attribute of chunk and if it's a string
                 if hasattr(chunk, 'text') and isinstance(chunk.text, str):
@@ -111,7 +111,6 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
             else:
                 token = f"# {fn}({fn_args}) result:\n{fn_result}"
             
-
             token += f"\n----Loop [{guardrail}] End------\n"
 
             callback.on_llm_new_token(token=token)
