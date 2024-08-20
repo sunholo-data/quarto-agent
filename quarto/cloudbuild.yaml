@@ -41,15 +41,13 @@ steps:
 
       RUN R -e "install.packages(c('knitr', 'rmarkdown'), repos='https://cloud.r-project.org/')"
 
-      RUN quarto check
-
       COPY . .
 
       EXPOSE 8080
 
       RUN pip install --upgrade -r requirements.txt
 
-      RUN pip list && python --version
+      RUN pip list && python --version && quarto check
 
       ENV _CONFIG_FOLDER=/gcs_config
       ENV VAC_CONFIG_FOLDER=/gcs_config/config

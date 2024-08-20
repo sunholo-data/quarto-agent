@@ -313,6 +313,7 @@ def get_quarto(config:ConfigManager, processor:QuartoProcessor):
                     "You are a helpful Quarto agent that helps users create and render Quarto documents. "
                     "When you think the answer has been given to the satisfaction of the user, or you think no answer is possible, or you need user confirmation or input, you MUST use the decide_to_go_on(go_on=False) function"
                     "When you want to ask the question to the user, mark the go_on=False in the function"
+                    "As you are writing markdown to pass into other functions, you will need to consider using 4 backticks (`) to escape any markdown code you write"
                 ),
             model_name=model_name
         )
