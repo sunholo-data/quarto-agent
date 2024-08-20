@@ -7,6 +7,7 @@ from my_log import log
 import subprocess
 import os
 import json
+import traceback
 
 class QuartoProcessor(GenAIFunctionProcessor):
 
@@ -25,11 +26,99 @@ class QuartoProcessor(GenAIFunctionProcessor):
         return file_url
         
     def construct_tools(self) -> dict:
-        tools = self.config.vacConfig("tools")
-        if not tools:
-            vac_name = self.config.vector_name
-            raise ValueError(f"No config.vac.{vac_name}.tools found")
-        quarto_config = tools.get("quarto")
+        #tools = self.config.vacConfig("tools")
+        #if not tools:
+        #    vac_name = self.config.vector_name
+        #    raise ValueError(f"No config.vac.{vac_name}.tools found")
+        #quarto_config = tools.get("quarto")
+
+        def render_and_upload_quarto(markdown: str = "") -> dict:
+            """
+            A string of markdown is supplied to the markdown argument.
+            The markdown must be quarto formatted to work with quarto.
+            The markdown will be supplied to the quarto_cmd() function and execute `quarto render temp.qmd --to={format} --output={filename}`
+            If successfully rendered, the output file will then be uploaded to a GCS bucket
+            
+            Args:
+                markdown (str): The Quarto markdown content to render. If not provided, a demo markdown string will be used.
+            
+            Returns:
+                dict: A dictionary with the result of the rendering process, including the URL of the uploaded file.
+            """
+
+            demo = """---
+title: "Quarto Basics"
+format:
+  html:
+    code-fold: true
+---
+
+For a demonstration of a line plot on a polar axis, see @fig-polar.
+
+```{python}
+#| label: fig-polar
+#| fig-cap: "A line plot on a polar axis"
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+r = np.arange(0, 2, 0.01)
+theta = 2 * np.pi * r
+fig, ax = plt.subplots(
+  subplot_kw = {'projection': 'polar'} 
+)
+ax.plot(theta, r)
+ax.set_rticks([0.5, 1, 1.5, 2])
+ax.grid(True)
+plt.show()
+```
+
+"""
+            if not markdown:
+                markdown = demo
+            
+            try:
+                # Write markdown content to a temporary file
+                markdown_filename = "renders/temp.qmd"
+                with open(markdown_filename, 'w') as f:
+                    f.write(markdown)
+                
+                # Render the markdown file using Quarto
+                format='html'
+                filename='output.html'
+                render_command = f"render {markdown_filename} --to={format} --output={filename}"
+                result = quarto_command(render_command)
+                result = json.loads(result)
+                log.info(f"{result=}")
+
+                # Check if there was an error during rendering
+                if result["status"] == "error":
+                    return json.dumps({
+                        "status": "error",
+                        "stdout": result["stdout"],
+                        "stderr": result["stderr"],
+                        "message": "Quarto rendering failed."
+                    })
+                
+                # Upload the rendered file to Google Cloud Storage
+                upload_to_gcs = self.upload_to_gcs(filename, file_type=format)
+                
+                return json.dumps({
+                    "status": "success",
+                    "gcs_url": upload_to_gcs,
+                    "stdout": result["stdout"],
+                    "stderr": result["stderr"]
+                })
+            
+            except Exception as e:
+                error_message = f"Error in render_and_upload_quarto: {str(e)}"
+                traceback_details = traceback.format_exc()
+                error_and_traceback = f"ERROR: {error_message} {traceback_details}"
+                log.warning(error_and_traceback)
+                return json.dumps({
+                    "status": "error",
+                    "message": error_and_traceback,
+                })
         
         def decide_to_go_on(go_on: bool, chat_summary: str) -> dict:
             """
@@ -55,13 +144,14 @@ class QuartoProcessor(GenAIFunctionProcessor):
             Run a Quarto command in the terminal and capture the output.
             Do not run commands starting with 'quarto' e.g. 'quarto preview' - instead use 'preview'.
             The 'quarto' command will be prefixed to your cmd.
-
             
             Args:
                 cmd (str): The command to execute with Quarto (e.g., 'check', 'render <file>').
             
             Returns:
                 dict: A dictionary containing 'stdout' and 'stderr' from the command execution.
+                    If the command is successful (return code 0), 'status' will be 'success',
+                    even if there is content in 'stderr'.
             """
             try:
                 result = subprocess.run(["quarto"] + cmd.split(), capture_output=True, text=True)
@@ -69,13 +159,26 @@ class QuartoProcessor(GenAIFunctionProcessor):
                 log.info(f"{result.stdout=}")
                 log.info(f"{result.stderr=}")
 
-                return json.dumps({
-                    "stdout": result.stdout,
-                    "stderr": result.stderr
-                })
-            
+                if result.returncode == 0:
+                    # Command was successful
+                    return json.dumps({
+                        "status": "success",
+                        "stdout": result.stdout,
+                        "stderr": result.stderr
+                    })
+                else:
+                    # Command failed
+                    return json.dumps({
+                        "status": "error",
+                        "stdout": result.stdout,
+                        "stderr": result.stderr,
+                        "message": f"Quarto command '{cmd}' failed with return code {result.returncode}",
+                        "returncode": result.returncode
+                    })
+                
             except Exception as e:
                 return json.dumps({
+                    "status": "error",
                     "stdout": "",
                     "stderr": f"Error running Quarto command '{cmd}': {str(e)}"
                 })
@@ -94,58 +197,75 @@ class QuartoProcessor(GenAIFunctionProcessor):
                 return f"OK: {result['stderr']}"
             return result["stdout"]
 
-        def quarto_render(markdown_content: str, output_format: str = "html", output_filename: str = "output.html") -> dict:
+        def install_pip_package(package_name: str) -> dict:
             """
-            Supply the quarto markdown content to this function and it will render it and upload to a Google Cloud Storage bucket, returning the GS URI
+            Install a pip package in the local environment.
             
             Args:
-                markdown_content (str): The Quarto markdown content to render.
-                output_format (str): The desired output format (e.g., "html", "pdf"). Default is "html".
-                output_filename (str): The filename for the rendered output. Default is "output.html".
+                package_name (str): The name of the pip package to install.
             
             Returns:
-                dict: A dictionary with the result of the rendering process, including the URL of the uploaded file.
+                dict: A dictionary containing 'stdout' and 'stderr' from the command execution.
             """
             try:
-                # Write markdown content to a temporary file
-                markdown_filename = "temp.qmd"
-                with open(markdown_filename, 'w') as f:
-                    f.write(markdown_content)
-                
-                # Render the markdown file using Quarto
-                render_command = f"render {markdown_filename} --to={output_format} --output={output_filename}"
-                result = quarto_command(render_command)
-                
-                # Check if there was an error during rendering
-                if result["stderr"]:
-                    return json.dumps({
-                        "status": "error",
-                        "stdout": result["stdout"],
-                        "stderr": result["stderr"],
-                        "message": "Quarto rendering failed."
-                    })
-                
-                # Upload the rendered file to Google Cloud Storage
-                upload_to_gcs = self.upload_to_gcs(output_filename, file_type=output_format)
-                
+                result = subprocess.run(["pip", "install", package_name], capture_output=True, text=True)
+
+                log.info(f"Installing package {package_name}")
+                log.info(f"{result.stdout=}")
+                log.info(f"{result.stderr=}")
+
                 return json.dumps({
-                    "status": "success",
-                    "gcs_url": upload_to_gcs,
-                    "stdout": result["stdout"],
-                    "stderr": result["stderr"]
+                    "stdout": result.stdout,
+                    "stderr": result.stderr
                 })
             
             except Exception as e:
-                return {
-                    "status": "error",
-                    "message": f"General error: {str(e)}"
-                }
+                return json.dumps({
+                    "stdout": "",
+                    "stderr": f"Error installing pip package '{package_name}': {str(e)}"
+                })
+
+        def install_r_package(package_name: str) -> dict:
+            """
+            Install an R package in the local environment.
+            
+            Args:
+                package_name (str): The name of the R package to install.
+            
+            Returns:
+                dict: A dictionary containing 'stdout' and 'stderr' from the command execution.
+            """
+            try:
+                # Construct the R command to install the package
+                r_command = f"install.packages('{package_name}', repos='https://cloud.r-project.org/')"
+                
+                # Run the R command
+                result = subprocess.run(["R", "-e", r_command], capture_output=True, text=True)
+
+                log.info(f"Installing R package {package_name}")
+                log.info(f"{result.stdout=}")
+                log.info(f"{result.stderr=}")
+
+                return json.dumps({
+                    "stdout": result.stdout,
+                    "stderr": result.stderr
+                })
+            
+            except Exception as e:
+                return json.dumps({
+                    "stdout": "",
+                    "stderr": f"Error installing R package '{package_name}': {str(e)}"
+                    })
+
+
 
         return {
-            "quarto_render": quarto_render,
+            "render_and_upload_quarto": render_and_upload_quarto,
             "quarto_command": quarto_command,
             "quarto_version": quarto_version,
-            "decide_to_go_on": decide_to_go_on
+            "decide_to_go_on": decide_to_go_on,
+            "install_pip_package": install_pip_package,
+            "install_r_package": install_r_package,
         }
 
 def get_quarto(config:ConfigManager, processor:QuartoProcessor):

@@ -1,3 +1,9 @@
+# Ignore quarto rendering files
+quarto/renders/*
+
+# Do not ignore the README.md file
+!quarto/renders/README.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

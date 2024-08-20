@@ -33,11 +33,15 @@ steps:
         && wget "https://github.com/quarto-dev/quarto-cli/releases/download/v${_QUARTO_VERSION}/quarto-${_QUARTO_VERSION}-linux-amd64.deb" -O quarto.deb \
         && dpkg -i quarto.deb \
         && rm quarto.deb \
+        && apt-get -y install r-base \
         && apt-get autoremove -y \
         && apt-get autoclean -y \
         && rm -rf /var/lib/apt/lists/* \
-        && rm -rf /tmp/* \
-        && quarto check
+        && rm -rf /tmp/*
+
+      RUN R -e "install.packages(c('knitr', 'rmarkdown'), repos='https://cloud.r-project.org/')"
+
+      RUN quarto check
 
       COPY . .
 
@@ -50,6 +54,7 @@ steps:
       ENV _CONFIG_FOLDER=/gcs_config
       ENV VAC_CONFIG_FOLDER=/gcs_config/config
       ENV ALLOYDB_DB=${_ALLOYDB_DB}
+      ENV _GCS_BUCKET=${_GCS_BUCKET}
 
       CMD exec gunicorn --bind :\$$PORT --workers 4 --timeout 0 app:app
       EOF
