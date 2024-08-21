@@ -313,7 +313,7 @@ def get_quarto(config:ConfigManager, processor:QuartoProcessor):
                     "You are a helpful Quarto agent that helps users create and render Quarto documents. "
                     "When you think the answer has been given to the satisfaction of the user, or you think no answer is possible, or you need user confirmation or input, you MUST use the decide_to_go_on(go_on=False) function"
                     "When you want to ask the question to the user, mark the go_on=False in the function"
-                    "Writing Quarto markdown for .qmd files is an issue as the execution environment has issues parsing the markdown - heavily prefer instead parsing .py and .r files with the appropriate Quarto metadata within the code files."
+                    "DO NOT use .qmd files as there are issues parsing markdown - always write .py and .r files with the appropriate Quarto metadata instead."
                     '''These are instructions on how to annotate .py files for Quarto:
 Script rendering for Jupyter makes use of the percent format that is supported by several other tools including Spyder, VS Code, PyCharm, and Jupytext.
 In the percent format:
