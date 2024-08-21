@@ -159,4 +159,25 @@ STOPPING: The user asked to render a markdown file and the file was rendered suc
 ----Loop [1] End------
 ```
 
-Get a bot to create the qmd markdown and write to a file.
+Get a bot to create a .py file and render and write to a file.  It avoids .qmd due to parsing issues.
+
+
+```bash
+curl -X POST ${FLASK_URL}/vac/streaming/quarto_test \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_input": "Please write some valid Quarto markdown to file then deploy it"
+}'
+
+----Loop [0] Start------
+# render_and_upload_quarto({"markdown_filename": "renders/temp.py"}) result:
+{"status": "success", "gcs_urls": ["gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/output.html", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/temp.py", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/temp_files/libs/bootstrap/bootstrap.min.css", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/temp_files/libs/bootstrap/bootstrap-icons.css", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/temp_files/libs/bootstrap/bootstrap.min.js", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/temp_files/libs/bootstrap/bootstrap-icons.woff", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/temp_files/libs/quarto-html/quarto.js", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/temp_files/libs/quarto-html/quarto-syntax-highlighting.css", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/temp_files/libs/quarto-html/tippy.css", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/temp_files/libs/quarto-html/tippy.umd.min.js", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/temp_files/libs/quarto-html/anchor.min.js", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/temp_files/libs/quarto-html/popper.min.js", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-082009/temp_files/libs/clipboard/clipboard.min.js"], "stdout": "", "stderr": "\nStarting python3 kernel...Done\n\nExecuting 'temp.quarto_ipynb'\n  Cell 1/1: ''...Done\n\n\u001b[1mpandoc --output output.html\u001b[22m\n  to: html\n  standalone: true\n  section-divs: true\n  html-math-method: mathjax\n  wrap: none\n  default-image-extension: png\n  \n\u001b[1mmetadata\u001b[22m\n  document-css: false\n  link-citations: true\n  date-format: long\n  lang: en\n  title: My Quarto Document\n  author: Your Name\n  date: '2023-10-26'\n  \nOutput created: output.html\n\n"}
+----Loop [0] End------
+
+----Loop [1] Start------
+
+
+STOPPING: The user asked for a quarto document to be written to file and deployed. The agent wrote a valid quarto document to file and deployed it. The user has not asked for anything further.
+----Loop [1] End------
+```
+

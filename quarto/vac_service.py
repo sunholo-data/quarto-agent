@@ -67,8 +67,16 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
     while guardrail < guardrail_max:
 
         log.info(f"# Loop [{guardrail}] - {content=}")
-        response = chat.send_message(content, stream=True)
         this_text = "" # reset for this loop
+        response = []
+
+        try:
+            response = chat.send_message(content, stream=True)
+        except Exception as e:
+            msg = f"Error sending {content} to model: {str(e)}"
+            log.info(msg)
+            callback.on_llm_new_token(token=msg)
+            break
         
         for chunk in response:
             try:
@@ -100,22 +108,26 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
         log.info(f"[{guardrail}] {executed_responses=}")
 
         token = ""
-        for executed_response in executed_responses:
-            fn = executed_response.function_response.name
-            fn_args = executed_response.function_response.response["args"]
-            fn_result = executed_response.function_response.response["result"]
-            log.info(f"{fn=}({fn_args}) {fn_result}]")
+        if executed_responses:
+        
+            for executed_response in executed_responses:
+                fn = executed_response.function_response.name
+                fn_args = executed_response.function_response.response["args"]
+                fn_result = executed_response.function_response.response["result"]
+                log.info(f"{fn=}({fn_args}) {fn_result}]")
 
-            if fn == "decide_to_go_on":
-                token = f"\n\nSTOPPING: {fn_result.get('chat_summary')}"
-            else:
-                token = f"# {fn}({fn_args}) result:\n{fn_result}"
+                if fn == "decide_to_go_on":
+                    token = f"\n\nSTOPPING: {fn_result.get('chat_summary')}"
+                else:
+                    token = f"# {fn}({fn_args}) result:\n{fn_result}"
+        else:
+            token = "\nNo function executions where found\n"
             
-            token += f"\n----Loop [{guardrail}] End------\n"
+        token += f"\n----Loop [{guardrail}] End------\n"
 
-            callback.on_llm_new_token(token=token)
-            big_text += token
-            this_text += token
+        callback.on_llm_new_token(token=token)
+        big_text += token
+        this_text += token
 
         if this_text:
             content.append(f"Quarto Agent: {this_text}")    

@@ -10,7 +10,7 @@ substitutions:
   _PROJECT_ID: terraform_managed
   _LANCEDB_BUCKET: terraform_managed
   _ALLOYDB_DB: terraform_managed
-  _QUARTO_VERSION: 1.3.340
+  _QUARTO_VERSION: 1.5.560
 
 tags: ['${_PROJECT_ID}', '${_SERVICE_NAME}']
 

@@ -44,17 +44,17 @@ class QuartoProcessor(GenAIFunctionProcessor):
         #    raise ValueError(f"No config.vac.{vac_name}.tools found")
         #quarto_config = tools.get("quarto")
 
-        def write_markdown_to_file(markdown: str, file_path: str = "renders/temp.qmd") -> str:
+        def write_to_file(text: str, file_path: str = "renders/temp.py") -> str:
             """
             Writes the given markdown content to a specified file.
 
             Args:
-                markdown (str): The markdown content to write to the file.
+                text (str): The text content to write to the file.
                 file_path (str): The path to the file where the markdown will be written. 
-                                Default is "renders/temp.qmd".
+                                Default is "renders/temp.py".
 
             Returns:
-                str: The path to the file where the markdown was written.
+                str: The path to the file where the text was written.
             """
             try:
                 # Ensure the directory exists
@@ -62,10 +62,10 @@ class QuartoProcessor(GenAIFunctionProcessor):
 
                 # Write the markdown content to the file
                 with open(file_path, 'w', encoding='utf-8') as file:
-                    file.write(markdown)
+                    file.write(text)
                 
                 # Log the successful write operation
-                log.info(f"Markdown successfully written to {file_path}")
+                log.info(f"Text successfully written to {file_path}")
                 return file_path
 
             except Exception as e:
@@ -297,7 +297,7 @@ class QuartoProcessor(GenAIFunctionProcessor):
             "decide_to_go_on": decide_to_go_on,
             "install_pip_package": install_pip_package,
             "install_r_package": install_r_package,
-            "write_markdown_to_file": write_markdown_to_file,
+            "write_to_file": write_to_file,
         }
 
 def get_quarto(config:ConfigManager, processor:QuartoProcessor):
@@ -313,8 +313,69 @@ def get_quarto(config:ConfigManager, processor:QuartoProcessor):
                     "You are a helpful Quarto agent that helps users create and render Quarto documents. "
                     "When you think the answer has been given to the satisfaction of the user, or you think no answer is possible, or you need user confirmation or input, you MUST use the decide_to_go_on(go_on=False) function"
                     "When you want to ask the question to the user, mark the go_on=False in the function"
-                    "As you are writing markdown to pass into other functions, you will need to consider using 4 backticks (`) to escape any markdown code you write"
-                ),
+                    "Writing Quarto markdown for .qmd files is an issue as the execution environment has issues parsing the markdown - heavily prefer instead parsing .py and .r files with the appropriate Quarto metadata within the code files."
+                    '''These are instructions on how to annotate .py files for Quarto:
+Script rendering for Jupyter makes use of the percent format that is supported by several other tools including Spyder, VS Code, PyCharm, and Jupytext.
+In the percent format:
+	•	Markdown cells are delimited by # %% [markdown], and can include content as single line comments (#) or multi-line strings (""").
+	•	Code cells are delimited by # %%.
+There are also Quarto-specific additions:
+	•	The script must start with a markdown cell that includes a YAML header block (including the usual --- YAML delimiters).
+	•	You can add code cell options in the usual way with #| comments.
+For example, here is a Python script that includes both markdown and code cells (you can click on the numbers on the right for further details):
+script.py
+# %% [markdown]
+# ---
+# title: Palmer Penguins
+# author: Norah Jones
+# date: 3/12/23
+# ---
+
+# %%
+#| echo: false
+import pandas as pd
+df = pd.read_csv("palmer-penguins.csv")
+
+# %% [markdown]
+"""
+## Exploring the data
+
+See @fig-bill-sizes for an exploration of bill sizes by species.
+"""
+
+# %% 
+#| label: fig-bill-sizes
+#| fig-cap: Bill Sizes by Species
+                                          
+import matplotlib.pyplot as plt           
+import seaborn as sns
+
+g = sns.FacetGrid(df, hue="species", height=3, aspect=3.5/1.5)
+g.map(plt.scatter, "bill_length_mm", "bill_depth_mm").add_legend()
+
+Generating Markdown
+Jupyter scripts are especially convenient when most of your document consists of code that dynamically generates markdown. You can write markdown from Python using functions in the IPython.display module. For example:
+# %%
+#| echo: false
+radius = 10
+from IPython.display import Markdown
+Markdown(f"The _radius_ of the circle is **{radius}**.")
+
+Note that dynamically generated markdown will still be enclosed in the standard Quarto output divs. If you want to remove all of Quarto’s default output enclosures use the output: asis option. For example:
+# %%
+#| echo: false
+#| output: asis
+radius = 10
+from IPython.display import Markdown
+Markdown(f"The _radius_ of the circle is **{radius}**.")
+
+Raw Cells
+You can include raw cells (e.g. HTML or LaTeX) within scripts using the # %% [raw] cell delimiter along with a format attribute, for example:
+# %% [raw] format="html"
+"""
+<iframe width="560" height="315" src="https://www.youtube.com/embed/lJIrF4YjHfQ?si=aP7PxA1Pz8IIoQUX"></iframe>
+"""                          
+'''),
             model_name=model_name
         )
 
