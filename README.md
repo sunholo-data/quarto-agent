@@ -4,6 +4,12 @@ A Google GenAI Agent that iterates creation and rendering of [Quarto artifacts](
 
 Uses a while loop and [Google GenAI function calling](https://ai.google.dev/gemini-api/docs/function-calling/tutorial?lang=python).
 
+The idea is to have something similar to [Anthropic's Artifacts](https://support.anthropic.com/en/articles/9487310-what-are-artifacts-and-how-do-i-use-them) but using Quarto since its got a lot more formats, so the next step is to serve up the files that are stored on Google Cloud Storage to the user in the browser.  
+
+[Chainlit](https://chainlit.io/) is good with PDFs for example:
+
+![](https://dev.sunholo.com/assets/images/eduvac-demo-52f240df3945c1af75c62c17e9f17b27.png)
+
 ## Examples
 
 Launching the Flask app then querying it with curl for demo, but it is intended to be queried from other agents in the [Multivac system](https://dev.sunholo.com/) who want Quarto files created.
@@ -90,7 +96,7 @@ Deploy to Multivac server to have Quarto agent available for other agents to mak
 
 The sunholo `GenAIFunctionProcessor` class takes functions for google genai library and executes them. It was originally created for database agents such as `AlloyDB` but its flexible enough to be used for other agents.
 
-You inherint from the class then define the function tools the agent can execute in a `construct_tools` method.
+You inherit from the class then define the function tools the agent can execute in a `construct_tools` method.
 
 A useful utility function to have is `decide_to_go_on()` which you can signal in a loop you are finished and want to stop.
 
@@ -396,7 +402,7 @@ class QuartoProcessor(GenAIFunctionProcessor):
 
 ## Agent loop
 
-The `quarto/vac_service.py` script contains a loop that users the tools.  Work in progress but it works ok as is.
+The [`quarto/vac_service.py`](quarto/vac_service.py) script contains a loop that uses the tools.  Work in progress but it works ok as is.
 
 ## Examples using curl
 
@@ -563,7 +569,9 @@ STOPPING: The user asked for a quarto document to be written to file and deploye
 ----Loop [1] End------
 ```
 
-```bash
+A more complex example.
+
+````bash
 url -X POST ${FLASK_URL}/vac/streaming/quarto_test \
   -H "Content-Type: application/json" \
   -d '{
@@ -621,7 +629,7 @@ STOPPING: The user has asked for a Quarto document that demonstrates a pandas pl
 ----Loop [0] End------
 {'prompt_token_count': 12636, 'candidates_token_count': 3711, 'total_token_count': 16347}
 ----------------------%                                                                  
-```
+````
 
 ![](img/pandas_plotting.png)
 
@@ -629,7 +637,7 @@ STOPPING: The user has asked for a Quarto document that demonstrates a pandas pl
 
 This took a few tries to get right, Vertex API borked out
 
-```bash
+````bash
 curl -X POST ${FLASK_URL}/vac/streaming/quarto_test \
   -H "Content-Type: application/json" \
   -d '{
@@ -716,4 +724,5 @@ STOPPING: The user asked for a Quarto .py file that will demonstrate pandas plot
 ----Loop [1] End------
 {'prompt_token_count': 10776, 'candidates_token_count': 1933, 'total_token_count': 12709}
 ----------------------%                             
-```
+````
+
