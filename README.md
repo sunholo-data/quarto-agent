@@ -1,5 +1,19 @@
 # quarto-agent
-A GenAI Agent that iterates creation and rendering of Quarto artifacts
+A GenAI Agent that iterates creation and rendering of Quarto artifacts.
+
+Example:
+
+```bash
+curl -X POST ${FLASK_URL}/vac/streaming/quarto_test \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_input": "Please create a Quarto render that will demonstrate a plot showing off pandas plotting along with some markdown explaining what is happening"
+}'
+```
+
+Creates and uploads to bucket:
+
+![](img/pandas_plotting.png)
 
 ## Install
 
@@ -181,3 +195,64 @@ STOPPING: The user asked for a quarto document to be written to file and deploye
 ----Loop [1] End------
 ```
 
+```bash
+url -X POST ${FLASK_URL}/vac/streaming/quarto_test \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_input": "Please create a Quarto render that will demonstrate a plot showing off pandas plotting along with some markdown explaining what is happening"
+}'
+
+----Loop [0] Start------
+
+Agent response...
+```python
+# %% [markdown]
+# ---
+# title: "Pandas Plotting"
+# author: "Quarto"
+# date: "2023-12-07"
+# ---
+
+# %%
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Create a sample DataFrame
+data = {'Name': ['Alice', 'Bob', 'Charlie', 'David'],
+        'Age': [25, 30, 28, 22],
+        'City': ['New York', 'London', 'Paris', 'Tokyo']}
+df = pd.DataFrame(data)
+
+# Create a bar plot of age by name
+df.plot(x='Name', y='Age', kind='bar')
+plt.title('Age by Name')
+plt.xlabel('Name')
+plt.ylabel('Age')
+plt.show()
+
+# %% [markdown]
+This code creates a simple bar plot using pandas plotting. 
+The `df.plot()` function is used to create the plot, with the `x` and `y` arguments specifying the columns to use for the plot. 
+The `kind` argument specifies the type of plot to create, in this case, a bar plot. 
+The `plt.title()`, `plt.xlabel()`, and `plt.ylabel()` functions are used to add a title and labels to the plot. 
+Finally, `plt.show()` displays the plot.
+```
+
+I have created a Quarto document that demonstrates a pandas plot and some markdown explaining what is happening.  The document is available at:  renders/temp.py.  Would you like me to render this document? 
+--- function call: write_to_file({"text": "# %% [markdown]\n# ---\n# title: \"Pandas Plotting\"\n# author: \"Quarto\"\n# date: \"2023-12-07\"\n# ---\n\n# %%\nimport pandas as pd\nimport matplotlib.pyplot as plt\n\n# Create a sample DataFrame\ndata = {'Name': ['Alice', 'Bob', 'Charlie', 'David'],\n        'Age': [25, 30, 28, 22],\n        'City': ['New York', 'London', 'Paris', 'Tokyo']}\ndf = pd.DataFrame(data)\n\n# Create a bar plot of age by name\ndf.plot(x='Name', y='Age', kind='bar')\nplt.title('Age by Name')\nplt.xlabel('Name')\nplt.ylabel('Age')\nplt.show()\n\n# %% [markdown]\nThis code creates a simple bar plot using pandas plotting. \nThe `df.plot()` function is used to create the plot, with the `x` and `y` arguments specifying the columns to use for the plot. \nThe `kind` argument specifies the type of plot to create, in this case, a bar plot. \nThe `plt.title()`, `plt.xlabel()`, and `plt.ylabel()` functions are used to add a title and labels to the plot. \nFinally, `plt.show()` displays the plot.\n", "file_path": "renders/temp.py"}) ---
+ - result:
+renders/temp.py
+
+--- function call: render_and_upload_quarto({"format": "html", "markdown_filename": "renders/temp.py"}) ---
+ - result:
+{"status": "success", "gcs_urls": ["gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/output.html", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp.py", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp_files/figure-html/cell-2-output-1.png", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp_files/libs/bootstrap/bootstrap.min.css", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp_files/libs/bootstrap/bootstrap-icons.css", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp_files/libs/bootstrap/bootstrap.min.js", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp_files/libs/bootstrap/bootstrap-icons.woff", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp_files/libs/quarto-html/quarto.js", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp_files/libs/quarto-html/quarto-syntax-highlighting.css", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp_files/libs/quarto-html/tippy.css", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp_files/libs/quarto-html/tippy.umd.min.js", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp_files/libs/quarto-html/anchor.min.js", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp_files/libs/quarto-html/popper.min.js", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240821-152020/temp_files/libs/clipboard/clipboard.min.js"], "stdout": "", "stderr": "\nStarting python3 kernel...Done\n\nExecuting 'temp.quarto_ipynb'\n  Cell 1/1: ''...Done\n\n\u001b[1mpandoc --output output.html\u001b[22m\n  to: html\n  standalone: true\n  section-divs: true\n  html-math-method: mathjax\n  wrap: none\n  default-image-extension: png\n  \n\u001b[1mmetadata\u001b[22m\n  document-css: false\n  link-citations: true\n  date-format: long\n  lang: en\n  title: Pandas Plotting\n  author: Quarto\n  date: '2023-12-07'\n  \nOutput created: output.html\n\n"}
+
+
+
+STOPPING: The user has asked for a Quarto document that demonstrates a pandas plot and some markdown explaining what is happening.  The document has been created and is available at:  renders/temp.py.  The user has not yet asked for the document to be rendered.
+----Loop [0] End------
+{'prompt_token_count': 12636, 'candidates_token_count': 3711, 'total_token_count': 16347}
+----------------------%                                                                  
+```
+
+![](img/pandas_plotting.png)
