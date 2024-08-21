@@ -1,6 +1,6 @@
 # quarto-agent
 
-A Google GenAI Agent that iterates creation and rendering of [Quarto artifacts](https://quarto.org/).
+A Google GenAI Agent that iterates creation and rendering of [Quarto artefacts](https://quarto.org/).
 
 Uses a while loop and [Google GenAI function calling](https://ai.google.dev/gemini-api/docs/function-calling/tutorial?lang=python).
 
