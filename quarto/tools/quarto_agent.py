@@ -60,12 +60,15 @@ class QuartoProcessor(GenAIFunctionProcessor):
                 # Ensure the directory exists
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
+                # ensures \n gets rendered correctly
+                text = text.encode('utf-8').decode('unicode_escape')
+
                 # Write the markdown content to the file
                 with open(file_path, 'w', encoding='utf-8') as file:
                     file.write(text)
                 
                 # Log the successful write operation
-                log.info(f"Text successfully written to {file_path}")
+                print(f"Text successfully written to {file_path}")
                 return file_path
 
             except Exception as e:

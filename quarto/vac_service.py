@@ -80,8 +80,9 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
         response = []
 
         try:
+            callback.on_llm_new_token(token="\n== Waiting for Agent ==\n")
             response = chat.send_message(content, stream=True)
-            callback.on_llm_new_token(token="\nAgent response...\n")
+            callback.on_llm_new_token(token="\n== Agent responding == \n")
         except Exception as e:
             msg = f"Error sending {content} to model: {str(e)}"
             log.info(msg)
@@ -89,7 +90,7 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
             break
 
         for chunk in response:
-            token = ""
+            token = "Agent Streaming:\n"
             try:
                 log.debug(f"[{guardrail}] {chunk=}")
                 # Check if 'text' is an attribute of chunk and if it's a string
@@ -116,7 +117,7 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
         executed_responses = processor.process_funcs(response)
         log.info(f"[{guardrail}] {executed_responses=}")
 
-        if executed_responses:
+        if executed_responses:  
             for executed_response in executed_responses:
                 token = ""
                 fn = executed_response.function_response.name
@@ -141,6 +142,9 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
         if this_text:
             content.append(f"Agent: {this_text}")    
             log.info(f"[{guardrail}] Updated content: {this_text}")
+        else:
+            log.warning(f"[{guardrail}] No content created this loop")
+            content.append(f"Agent: No response was found for loop [{guardrail}]")
 
         callback.on_llm_new_token(
             token=f"\n----Loop [{guardrail}] End------\n{usage_metadata}\n----------------------"
