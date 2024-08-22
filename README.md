@@ -46,7 +46,7 @@ u001b[2K\u001b[G\n[\u2713] Downloading TinyTex v2024.07.03\n\n(|) Unzipping Tiny
  Setting default repository\u001b[2K\u001b[G\n[\u2713] Default Repository: https://mirrors.dotsrc.org/ctan/systems/texlive/tlnet/\nInstallation successful\n"}
 ```
 
-Agent completes the task:
+But! Agent still completes the task:
 
 ```
 --- function call: render_and_upload_quarto({"format": "pdf", "markdown_filename": "renders/temp.py"}) ---
@@ -74,6 +74,19 @@ curl -X POST ${FLASK_URL}/vac/streaming/quarto_test \
 ```
 
 ![pandas powerpoint](img/pandas_plotting_powerpoint.png)
+
+Use Google AI direct PDF uploads to add context to prompt, and ask it to summarise the PDF into another PDF:
+
+```
+curl -X POST ${FLASK_URL}/vac/streaming/quarto_test \
+  -H "Content-Type: multipart/form-data" \
+  -F "user_input=Please create a shorter summary of the ai-in-education PDF file, in another PDF" \
+  -F "file=@../docs/ai-in-education.pdf"
+```
+
+![](img/summarise_pdf_to_pdf.png)
+
+
 
 
 ## Install
@@ -726,3 +739,30 @@ STOPPING: The user asked for a Quarto .py file that will demonstrate pandas plot
 ----------------------%                             
 ````
 
+Summarise one PDF and output it to another PDF:
+
+```bash
+curl -X POST ${FLASK_URL}/vac/streaming/quarto_test \
+  -H "Content-Type: multipart/form-data" \
+  -F "user_input=Please create a shorter summary of the ai-in-education PDF file, in another PDF" \
+  -F "file=@../docs/ai-in-education.pdf"
+
+----Loop [0] Start------
+
+= Calling Agent
+
+-- Agent response
+prompt_token_count: [21216]/[21216] candidates_token_count: [295]/[295] total_token_count: [21511]/[21511] 
+
+
+Agent function execution:
+--- function call: write_to_file({"text": "# %% [markdown]\n# ---\n# title: AI in Education\n# author: Mutlu Cukurova\n# date: 3/12/23\n# ---\n\n# %%\n#| echo: false\n#| output: asis\nfrom IPython.display import Markdown\nMarkdown(\"This paper presents a multi-dimensional view of AI's role in learning and education, emphasizing the intricate interplay between AI, analytics, and the learning processes. The author challenges the prevalent narrow conceptualization of AI as stochastic tools as exemplified in generative AI and argues for the importance of alternative conceptualizations of AI. The paper presents three unique conceptualizations of AI in education: the externalization of human cognition, the internalization of AI models to influence human mental models, and the extension of human cognition via tightly integrated human-AI systems. The author concludes with advocacy for a broader approach to AI in Education that goes beyond considerations on the design and development of AI solutions in Education, but also includes educating people about AI and innovating educational systems to remain relevant in an AI-ubiquitous world.\")\n", "file_path": "renders/temp.py"}) --- - result:
+renders/temp.py
+--- function call: render_and_upload_quarto({"format": "pdf", "markdown_filename": "renders/temp.py"}) --- - result:
+{"status": "success", "gcs_urls": ["gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240822-094515/temp.py", "gs://multivac-internal-dev-dev-llmops-bucket/quarto/quarto_test/renders/20240822-094515/output.pdf"], "stdout": "", "stderr": "\nStarting python3 kernel...Done\n\nExecuting 'temp.quarto_ipynb'\n  Cell 1/1: ''...Done\n\n\u001b[1mpandoc --output temp.tex\u001b[22m\n  to: latex\n  standalone: true\n  pdf-engine: xelatex\n  variables:\n    graphics: true\n    tables: true\n  default-image-extension: pdf\n  \n\u001b[1mmetadata\u001b[22m\n  documentclass: scrartcl\n  classoption:\n    - DIV=11\n    - numbers=noendperiod\n  papersize: letter\n  header-includes:\n    - '\\KOMAoption{captions}{tableheading}'\n  block-headings: true\n  title: AI in Education\n  author: Mutlu Cukurova\n  date: 3/12/23\n  \n\u001b[1m\u001b[34m\nRendering PDF\u001b[39m\u001b[22m\n\u001b[1m\u001b[34mrunning xelatex - 1\u001b[39m\u001b[22m\n  This is XeTeX, Version 3.141592653-2.6-0.999996 (TeX Live 2024) (preloaded format=xelatex)\n   restricted \\write18 enabled.\n  entering extended mode\n  \n\u001b[1m\u001b[34mrunning xelatex - 2\u001b[39m\u001b[22m\n  This is XeTeX, Version 3.141592653-2.6-0.999996 (TeX Live 2024) (preloaded format=xelatex)\n   restricted \\write18 enabled.\n  entering extended mode\n  \n\nOutput created: output.pdf\n\n"}
+
+
+STOPPING: The user asked for a summary of the PDF, and I have created a summary and rendered it to a PDF file.
+----Loop [0] End------
+{'prompt_token_count': 21216, 'candidates_token_count': 295, 'total_token_count': 21511}
+```

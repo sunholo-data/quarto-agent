@@ -10,6 +10,7 @@ import tempfile
 from my_log import log
 
 import google.generativeai as genai
+import json
 
 init_genai()
 
@@ -113,12 +114,11 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
                 # Check if 'text' is an attribute of chunk and if it's a string
                 if hasattr(chunk, 'text') and isinstance(chunk.text, str):
                     token = chunk.text
+                    callback.on_llm_new_token(token=token)
+                    big_text += token
+                    this_text += token
                 else:
                     log.info(f"skipping {chunk}")
-
-                callback.on_llm_new_token(token=token)
-                big_text += token
-                this_text += token
                 
             except ValueError as err:
                 callback.on_llm_new_token(token=f"{str(err)} for {chunk=}")
@@ -136,10 +136,28 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
                 fn_result = executed_response.function_response.response["result"]
                 log.info(f"{fn=}({fn_args}) {fn_result}]")
 
+                try:
+                    fn_result_json = json.loads(fn_result)
+                except Exception:
+                    log.warning(f"{fn_result} was not json decoded")
+                    fn_result_json=None
+
                 if fn == "decide_to_go_on":
-                    token = f"\n\nSTOPPING: {fn_result.get('chat_summary')}"
+                    token = f"\n\n{'STOPPING' if not fn_result.get('go_on') else 'CONTINUE'}: {fn_result.get('chat_summary')}"
                 else:
-                    token = f"--- function call: {fn}({fn_args}) ---\n - result:\n{fn_result}\n"
+                    token = f"--- function call: {fn}({fn_args}) ---"
+                    if fn_result_json:
+                        if fn_result_json.get('stdout'):
+                            # ensures \n gets rendered correctly
+                            text = fn_result_json.get('stdout').encode('utf-8').decode('unicode_escape')
+                            token += text
+                        if fn_result_json.get('stderr'):
+                            text = fn_result_json.get('stdout').encode('utf-8').decode('unicode_escape')
+                            token += text
+                        if not fn_result_json.get('stdout') and fn_result_json.get('stderr'):
+                            token += f" - result:\n{fn_result}\n"
+                    else:
+                        token += f" - result:\n{fn_result}\n"
                 
                 big_text += token
                 this_text += token
@@ -152,7 +170,7 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
 
         if this_text:
             content.append(f"Agent: {this_text}")    
-            log.info(f"[{guardrail}] Updated content: {this_text}")
+            log.info(f"[{guardrail}] Updated content:\n{this_text}")
         else:
             log.warning(f"[{guardrail}] No content created this loop")
             content.append(f"Agent: No response was found for loop [{guardrail}]")

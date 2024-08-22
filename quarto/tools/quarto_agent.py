@@ -44,27 +44,44 @@ class QuartoProcessor(GenAIFunctionProcessor):
         #    raise ValueError(f"No config.vac.{vac_name}.tools found")
         #quarto_config = tools.get("quarto")
 
-        def write_to_file(text: str, file_path: str = "renders/temp.py") -> str:
+        def write_to_file(text: str, file_path: str = "renders/temp.py", append: bool=False) -> str:
             """
-            Writes the given markdown content to a specified file.
+            Writes the given text content to a specified file for use in Quarto renders. 
+            Do not use backticks (```) to the start of the text - this is text that will write directly to the file, not within markdown.
+            This function will only write .py, .r files. Do not attempt to write other types of files with this function.
+            Will only accept up to 4000 characters of text each time to avoid overflow issues. 
+            Use the same file_path argument and call the function again to append additional text to the file.
 
             Args:
                 text (str): The text content to write to the file.
                 file_path (str): The path to the file where the markdown will be written. 
                                 Default is "renders/temp.py".
-
+                append (bool): Whether you want to append to the existing file.  If False (default) then it will overwrite the existing file.
             Returns:
                 str: The path to the file where the text was written.
+            Raises:
+                ValueError: If the file extension is not .py or .r.
+                ValueError: If the text exceeds 4000 characters.
             """
             try:
+                # Validate the file extension
+                if not file_path.endswith(('.py', '.r')):
+                    raise ValueError("This function only supports writing to .py and .r files.")
+
+                # Ensure the text does not exceed 4000 characters
+                if len(text) > 4000:
+                    raise ValueError("Text exceeds the 4000 character limit. Shorten text and then call this function again with same file_name to append the text to the file.")
+
                 # Ensure the directory exists
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
-                # ensures \n gets rendered correctly
+                # Ensure \n gets rendered correctly
                 text = text.encode('utf-8').decode('unicode_escape')
 
-                # Write the markdown content to the file
-                with open(file_path, 'w', encoding='utf-8') as file:
+                mode = 'a' if append else 'w'
+                
+                # Write or append the content to the file
+                with open(file_path, mode, encoding='utf-8') as file:  
                     file.write(text)
                 
                 # Log the successful write operation
@@ -72,7 +89,7 @@ class QuartoProcessor(GenAIFunctionProcessor):
                 return file_path
 
             except Exception as e:
-                log.error(f"Error writing markdown to file: {str(e)}")
+                print(f"Error writing content to file: {str(e)}")
                 raise
 
         def render_and_upload_quarto(markdown_filename: str = "", format: str='html') -> dict:
@@ -291,8 +308,6 @@ class QuartoProcessor(GenAIFunctionProcessor):
                     "stderr": f"Error installing R package '{package_name}': {str(e)}"
                     })
 
-
-
         return {
             "render_and_upload_quarto": render_and_upload_quarto,
             "quarto_command": quarto_command,
@@ -316,6 +331,7 @@ def get_quarto(config:ConfigManager, processor:QuartoProcessor):
                     "You are a helpful Quarto agent that helps users create and render Quarto documents. "
                     "When you think the answer has been given to the satisfaction of the user, or you think no answer is possible, or you need user confirmation or input, you MUST use the decide_to_go_on(go_on=False) function"
                     "When you want to ask the question to the user, mark the go_on=False in the function"
+                    "You must use the render_and_upload_quarto() function to render Quarto functions and upload them to the pre-configured bucket.  Do not try to use your own bucket"
                     "DO NOT use .qmd files as there are issues parsing markdown - always write .py and .r files with the appropriate Quarto metadata instead."
                     '''These are instructions on how to annotate .py files for Quarto:
 Script rendering for Jupyter makes use of the percent format that is supported by several other tools including Spyder, VS Code, PyCharm, and Jupytext.
