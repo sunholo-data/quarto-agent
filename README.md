@@ -81,7 +81,7 @@ curl -X POST ${FLASK_URL}/vac/streaming/quarto_test \
 1. Clone repo
 1. Install Quarto: https://quarto.org/docs/get-started/
 1. Create a `.venv` in your favourite manner.
-1. Install Sunholo `sunholo[gcp,http]>=0.86.1`
+1. Install Sunholo `pip install sunholo[gcp,http]>=0.86.1`
 
 Start Flask app locally
 

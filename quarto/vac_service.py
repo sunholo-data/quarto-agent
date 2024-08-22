@@ -80,19 +80,36 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
         response = []
 
         try:
-            callback.on_llm_new_token(token="\n== Waiting for Agent ==\n")
+            callback.on_llm_new_token(token="\n= Calling Agent\n")
             response = chat.send_message(content, stream=True)
-            callback.on_llm_new_token(token="\n== Agent responding == \n")
+            
         except Exception as e:
             msg = f"Error sending {content} to model: {str(e)}"
             log.info(msg)
             callback.on_llm_new_token(token=msg)
             break
 
+        loop_metadata = response.usage_metadata
+        if loop_metadata:
+            usage_metadata = {
+                "prompt_token_count": usage_metadata["prompt_token_count"] + (loop_metadata.prompt_token_count or 0),
+                "candidates_token_count": usage_metadata["candidates_token_count"] + (loop_metadata.candidates_token_count or 0),
+                "total_token_count": usage_metadata["total_token_count"] + (loop_metadata.total_token_count or 0),
+            }
+            callback.on_llm_new_token(token=(
+                "\n-- Agent response\n" 
+                f"prompt_token_count: [{loop_metadata.prompt_token_count}]/[{usage_metadata["prompt_token_count"]}] "
+                f"candidates_token_count: [{loop_metadata.candidates_token_count}]/[{usage_metadata["candidates_token_count"]}] "
+                f"total_token_count: [{loop_metadata.total_token_count}]/[{usage_metadata["total_token_count"]}] \n"
+                ))
+        loop_metadata = None
+    
         for chunk in response:
-            token = "Agent Streaming:\n"
+            if not chunk:
+                continue
+
+            log.debug(f"[{guardrail}] {chunk=}")
             try:
-                log.debug(f"[{guardrail}] {chunk=}")
                 # Check if 'text' is an attribute of chunk and if it's a string
                 if hasattr(chunk, 'text') and isinstance(chunk.text, str):
                     token = chunk.text
@@ -103,13 +120,6 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
                 big_text += token
                 this_text += token
                 
-                chunk_metadata = chunk.usage_metadata
-                usage_metadata = {
-                    "prompt_token_count": usage_metadata["prompt_token_count"] + (chunk_metadata.prompt_token_count or 0),
-                    "candidates_token_count": usage_metadata["candidates_token_count"] + (chunk_metadata.candidates_token_count or 0),
-                    "total_token_count": usage_metadata["total_token_count"] + (chunk_metadata.total_token_count or 0),
-                }
-
             except ValueError as err:
                 callback.on_llm_new_token(token=f"{str(err)} for {chunk=}")
         
@@ -118,6 +128,7 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
         log.info(f"[{guardrail}] {executed_responses=}")
 
         if executed_responses:  
+            callback.on_llm_new_token(token="\nAgent function execution:\n")
             for executed_response in executed_responses:
                 token = ""
                 fn = executed_response.function_response.name
@@ -128,7 +139,7 @@ def vac_stream(question: str, vector_name:str, chat_history=[], callback=None, *
                 if fn == "decide_to_go_on":
                     token = f"\n\nSTOPPING: {fn_result.get('chat_summary')}"
                 else:
-                    token = f"--- function call: {fn}({fn_args}) ---\n - result:\n{fn_result}\n\n"
+                    token = f"--- function call: {fn}({fn_args}) ---\n - result:\n{fn_result}\n"
                 
                 big_text += token
                 this_text += token
